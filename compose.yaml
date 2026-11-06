@@ -1,0 +1,110 @@
+name: tina
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: tina
+      POSTGRES_DB: tina
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run python3 tools/bootstrap.py first}
+    volumes: ["ledger:/var/lib/postgresql/data"]
+    networks: [ledger]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tina -d tina"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    mem_limit: 512m
+
+  control:
+    build: {context: ., target: app}
+    restart: unless-stopped
+    environment:
+      TINA_DATABASE_URL: postgresql+psycopg://tina:${POSTGRES_PASSWORD}@postgres:5432/tina
+      TINA_ENGINE_TOKEN: ${TINA_ENGINE_TOKEN:?Run bootstrap}
+      TINA_READ_TOKEN: ${TINA_READ_TOKEN:?Run bootstrap}
+      TINA_ADMIN_TOKEN: ${TINA_ADMIN_TOKEN:?Run bootstrap}
+      TINA_RESEARCH_TOKEN: ${TINA_RESEARCH_TOKEN:?Run bootstrap}
+      TINA_FREQTRADE_PASSWORD: ${TINA_FREQTRADE_PASSWORD:?Run bootstrap}
+      TINA_AI_POLICY: ${TINA_AI_POLICY:-shadow}
+    depends_on:
+      postgres: {condition: service_healthy}
+    ports: ["127.0.0.1:8081:8081"]
+    networks: [ledger, execution, research]
+    read_only: true
+    tmpfs: ["/tmp"]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8081/healthz', timeout=2)"]
+      interval: 10s
+      timeout: 3s
+      retries: 20
+    mem_limit: 512m
+
+  freqtrade:
+    image: freqtradeorg/freqtrade:2026.10
+    restart: unless-stopped
+    entrypoint: ["python", "/freqtrade/engine_start.py"]
+    command: ["trade"]
+    environment:
+      PYTHONDONTWRITEBYTECODE: "1"
+      TINA_ENGINE_TOKEN: ${TINA_ENGINE_TOKEN:?Run bootstrap}
+      TINA_CONTROL_URL: http://control:8081
+      FREQTRADE__API_SERVER__USERNAME: tina
+      FREQTRADE__API_SERVER__PASSWORD: ${TINA_FREQTRADE_PASSWORD:?Run bootstrap}
+      FREQTRADE__API_SERVER__JWT_SECRET_KEY: ${TINA_FREQTRADE_JWT:?Run bootstrap}
+      FREQTRADE__API_SERVER__WS_TOKEN: ${TINA_FREQTRADE_WS:?Run bootstrap}
+    volumes:
+      - engine:/freqtrade/user_data
+      - ./user_data/strategies:/freqtrade/user_data/strategies:ro
+      - ./config/freqtrade.json:/freqtrade/config.json:ro
+      - ./tools/engine_start.py:/freqtrade/engine_start.py:ro
+    depends_on:
+      control: {condition: service_healthy}
+    ports: ["127.0.0.1:8080:8080"]
+    networks: [execution]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: 1536m
+
+  research:
+    profiles: [research]
+    build: {context: ., target: research}
+    restart: unless-stopped
+    env_file: [.env.research]
+    environment:
+      TINA_RESEARCH_TOKEN: ${TINA_RESEARCH_TOKEN:?Run bootstrap}
+      TINA_CONTROL_URL: http://control:8081
+      TINA_LLM_PROVIDER: ${TINA_LLM_PROVIDER:-}
+      TINA_QUICK_MODEL: ${TINA_QUICK_MODEL:-}
+      TINA_DEEP_MODEL: ${TINA_DEEP_MODEL:-}
+      TINA_RESEARCH_INTERVAL: "3600"
+    depends_on:
+      control: {condition: service_healthy}
+    volumes: ["research-cache:/home/tina/.tradingagents"]
+    networks: [research]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: 1536m
+
+  reports:
+    profiles: [reports]
+    build: {context: ., target: reports}
+    environment:
+      TINA_READ_TOKEN: ${TINA_READ_TOKEN:?Run bootstrap}
+      TINA_CONTROL_URL: http://control:8081
+    volumes: ["reports:/app/reports"]
+    networks: [research]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+
+volumes:
+  ledger:
+  engine:
+  research-cache:
+  reports:
+networks:
+  ledger: {internal: true}
+  execution:
+  research:
