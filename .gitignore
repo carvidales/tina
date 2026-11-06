@@ -1,0 +1,15 @@
+.env
+.env.*
+!.env.example
+!.env.research.example
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.egg-info/
+*.sqlite*
+reports/
+*.log
+user_data/data/
+user_data/logs/
+user_data/backtest_results/
