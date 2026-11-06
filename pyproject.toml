@@ -14,7 +14,7 @@ dependencies = [
 
 [project.optional-dependencies]
 test = ["pytest==9.0.2", "pandas>=2.2,<4", "PyYAML>=6,<7"]
-research = ["tradingagents==0.7.1"]
+research = ["tradingagents @ https://github.com/TauricResearch/TradingAgents/archive/c4544913a14ed3df5f1ed7b9e8483270ce20682a.tar.gz"]
 reports = ["quantstats>=0.0.77,<1", "pandas>=2.2,<4"]
 
 [tool.setuptools.packages.find]
