@@ -1,0 +1,23 @@
+name: Simple signals
+on:
+  push:
+    paths: ['tools/signals.py', 'signal_tests/**', '.github/workflows/signals.yml']
+  pull_request:
+    paths: ['tools/signals.py', 'signal_tests/**', '.github/workflows/signals.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  offline:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python: ['3.10', '3.13']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - run: python -m unittest discover -s signal_tests -v
+      - run: python -m py_compile tools/signals.py
+      - run: python tools/signals.py --help
